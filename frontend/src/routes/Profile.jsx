@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import { Avatar, Box, Icon, Text } from "@chakra-ui/react"
+import { Avatar, Box, Icon, Text, Button } from "@chakra-ui/react"
 import { SiHeadphonezone } from "react-icons/si";
 import Activity from "../components/Activity";
 import RecentListens from "../components/RecentListens";
@@ -8,6 +8,8 @@ import TopArtists from "../components/UserTopArtists";
 import CurrentListen from "../components/CurrentListen";
 import { useEffect, useState } from "react";
 import backend from "../backend";
+import { getID } from '../user.js'
+import { useNavigate } from 'react-router-dom'
 
 const sectionHeaderStyle = {
   as:"h2", 
@@ -22,6 +24,14 @@ function Profile() {
   const [followers, setFollowers] = useState(null)
   const [followings, setFollowings] = useState(null)
 
+  //TODO: Connect this to backend
+  const [isFollowed, setIsFollowed] = useState(false)
+
+  const [isOwnProfile, setIsOwnProfile] = useState(false)
+  const [localUserID, setLocalUserID] = useState("")
+
+  const navigate = useNavigate()
+
   useEffect(() => {
     (async () => {
         try {
@@ -31,17 +41,81 @@ function Profile() {
           setImage(data.image)
           setFollowers(data.follower_count)
           setFollowings(data.following_count)
+
+          const localUserID = await getID()
+          setLocalUserID(localUserID)
+          setIsOwnProfile(id == localUserID)
+
+          if(id != localUserID)
+          {
+            const isFollowing = await backend.get('/user/' + localUserID + '/is-following/' + id)
+            setIsFollowed(isFollowing.data.is_following)
+          }
+          else
+          {
+            // If it's our own profile we set IsFollowed to true
+            setIsFollowed(true)
+          }
+
         } catch (error) {
-          console.error('Error fetching recent tracks:', error);
+          console.error('Error fetching user data:', error);
         }
     })()
   }, [])
+
+  const onFollowClick = () => {
+    //TODO
+    (async () => {
+      try {
+        if(isFollowed)
+        {
+          const res = await backend.delete('/user/'+id+'/followers/'+localUserID)
+
+          if(res.status == 200)
+          {
+            setIsFollowed(false)
+            setFollowers(parseInt(followers) - 1)
+          }
+        }
+        else
+        {
+          const res = await backend.post('/user/'+id+'/followers', { follower: localUserID })
+
+          if(res.status == 201)
+          {
+            setIsFollowed(true)
+            setFollowers(parseInt(followers) + 1)
+          }
+        }
+      } catch (error) {
+        console.error('Error upadting following:', error);
+      }
+  })()
+  }
 
   return (
     <div>
       
       {/* Gray header box */}
       <Box position="relative" textAlign="center" >
+        <Box fontSize='1.5rem' zIndex="3" position="absolute" left="4" bottom="16" display="inline-flex">
+          <Text color="blue.500" zIndex="3" position="relative" as="button"
+          _hover={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => navigate("/follow/" + id)}>
+            {followers + " Followers"}
+          </Text>
+          <Text color="blue.500" ml="2" zIndex="3" position="relative" as="button"
+          _hover={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => navigate("/follow/" + id)}>
+            {followings + " Following"}
+          </Text>
+          {isOwnProfile ||
+            <Button px="2" ml="4" color={isFollowed ? "gray.500" : "blue.500"}>
+              <Text fontSize="1.5rem" color="blue.500" zIndex="3" as={isFollowed ? "" : "button"}
+                  _hover={isFollowed ? {} : { textDecoration: "underline", cursor: "pointer" }} onClick={onFollowClick}>
+                    {isFollowed ? "Unfollow" : "+ Follow"}
+              </Text>
+            </Button>
+          }
+        </Box>
       <Box
         bg="gray.700"
         width="100%"
@@ -58,7 +132,7 @@ function Profile() {
         <Text fontSize="2.5rem" color="white" mt="-12" zIndex="3" position="relative">
           {displayName}
         </Text>
-        <Box display = 'flex' justifyContent = 'center' mt = '4'>
+        <Box display = 'flex' justifyContent = 'center' mt = '2'>
           <Avatar name={displayName} src={image} size='2xl' zIndex="3"/>
         </Box>
       </Box>
